@@ -153,7 +153,7 @@
     async _fetchDimensionName(s) {
       try {
         const token = await this._getToken(s);
-        const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' };
+        const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json', 'x-sap-sac-custom-auth': 'true' };
 
         // Try list endpoint first (handles paginated OData or plain array)
         let url = `${s.baseUrl}/api/v1/dataimport/publicDimensions`;
@@ -161,7 +161,7 @@
           const r = await fetch(url, { headers });
           if (!r.ok) break;
           const data = await r.json();
-          const list = Array.isArray(data) ? data : (data.value || []);
+          const list = Array.isArray(data) ? data : (data.publicDimensions || data.value || []);
           const match = list.find(d => (d.publicDimensionID || '') === s.dimId);
           if (match) return match;
           url = (!Array.isArray(data) && data['@odata.nextLink']) || null;
