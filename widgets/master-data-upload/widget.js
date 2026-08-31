@@ -112,6 +112,12 @@
     .log-success{ color: #00ff88; }
     .log-warn   { color: #ffc107; }
     .log-info   { color: #66aaff; }
+
+    /* Tabs */
+    .tabs { display: flex; flex-shrink: 0; border-bottom: 2px solid #e0e0e0; background: #f5f5f5; }
+    .tab { flex: 1; padding: 7px 10px; font-size: 11px; font-weight: 600; text-align: center; cursor: pointer; color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color 0.15s; }
+    .tab.active { color: #1F4E79; border-bottom-color: #1F4E79; background: white; }
+    .tab:hover:not(.active) { color: #555; background: #eee; }
   `;
 
   // ── Widget Class ──────────────────────────────────────────────────────────
@@ -123,6 +129,8 @@
       this._excelRecords = [];   // normalized records from Excel
       this._existingIds  = new Set();
       this._deltaRecords = [];
+      this._txRecords    = [];   // raw transaction records
+      this._missingMaster = [];  // dim IDs missing in SAC
       this._rendered     = false;
     }
 
@@ -146,6 +154,8 @@
         secret:     p.clientSecret || '',
         dimId:      p.dimensionId || '',
         namespace:  p.namespace  || 'sac_public_dimensions',
+        modelId:    p.modelId    || '',
+        txDimCol:   p.txDimCol   || '',
       };
     }
 
@@ -378,6 +388,8 @@
               <label>Client Secret<input id="s-secret"   type="password" /></label>
               <label>Dimension ID<input id="s-dimId"      type="text"     /></label>
               <label>Namespace   <input id="s-namespace"  type="text"     /></label>
+              <label>Model ID    <input id="s-modelId"    type="text"     /></label>
+              <label>Dim Key Column<input id="s-txDimCol" type="text" placeholder="e.g. Material" /></label>
             </div>
             <div id="dim-name-row" style="margin-top:8px; display:none; background:#EEF4FB; border:1px solid #c5d9ee; border-radius:4px; padding:8px 10px;">
               <div style="font-size:10px; font-weight:700; color:#1F4E79; letter-spacing:0.4px; margin-bottom:6px;">DIMENSION INFO</div>
@@ -396,45 +408,94 @@
 
           <div class="body">
 
-            <div class="left">
+            <!-- Tab switcher -->
+            <div style="display:flex; flex-direction:column; width:42%; flex-shrink:0; border-right:1px solid #e0e0e0; overflow:hidden;">
+              <div class="tabs">
+                <div class="tab active" id="tab-master">📦 Master Data</div>
+                <div class="tab" id="tab-tx">📊 Transaction</div>
+              </div>
 
-              <div>
-                <div class="section-label">1 — Upload Excel File</div>
-                <div class="drop-zone" id="drop-zone">
-                  <div class="dz-icon">📄</div>
-                  <div class="dz-text">Drop Excel file here or click to browse</div>
-                  <div class="dz-filename" id="file-name"></div>
+              <!-- Master Data Panel -->
+              <div id="panel-master" style="display:flex; flex-direction:column; flex:1; padding:12px; gap:10px; overflow-y:auto;">
+
+                <div>
+                  <div class="section-label">1 — Upload Excel File</div>
+                  <div class="drop-zone" id="drop-zone">
+                    <div class="dz-icon">📄</div>
+                    <div class="dz-text">Drop Excel file here or click to browse</div>
+                    <div class="dz-filename" id="file-name"></div>
+                  </div>
+                  <input type="file" id="file-input" accept=".xlsx,.xls" />
                 </div>
-                <input type="file" id="file-input" accept=".xlsx,.xls" />
-              </div>
 
-              <div>
-                <div class="section-label">2 — Summary</div>
-                <div class="stats">
-                  <div class="stat-box">
-                    <div class="stat-num" id="stat-excel">—</div>
-                    <div class="stat-lbl">EXCEL ROWS</div>
-                  </div>
-                  <div class="stat-box ok">
-                    <div class="stat-num" id="stat-sac">—</div>
-                    <div class="stat-lbl">IN SAC</div>
-                  </div>
-                  <div class="stat-box delta">
-                    <div class="stat-num" id="stat-delta">—</div>
-                    <div class="stat-lbl">TO UPLOAD</div>
+                <div>
+                  <div class="section-label">2 — Summary</div>
+                  <div class="stats">
+                    <div class="stat-box">
+                      <div class="stat-num" id="stat-excel">—</div>
+                      <div class="stat-lbl">EXCEL ROWS</div>
+                    </div>
+                    <div class="stat-box ok">
+                      <div class="stat-num" id="stat-sac">—</div>
+                      <div class="stat-lbl">IN SAC</div>
+                    </div>
+                    <div class="stat-box delta">
+                      <div class="stat-num" id="stat-delta">—</div>
+                      <div class="stat-lbl">TO UPLOAD</div>
+                    </div>
                   </div>
                 </div>
+
+                <div id="delta-wrap"></div>
+
+                <div class="actions">
+                  <button id="btn-fetch"  class="btn btn-primary">🔍 Fetch SAC Data</button>
+                  <button id="btn-compare" class="btn btn-secondary" disabled>⚖ Compare</button>
+                  <button id="btn-import" class="btn btn-success"   disabled>⬆ Import New Records</button>
+                  <button id="btn-export" class="btn btn-export">⬇ Export SAC Data</button>
+                </div>
+
               </div>
 
-              <div id="delta-wrap"></div>
+              <!-- Transaction Data Panel -->
+              <div id="panel-tx" style="display:none; flex-direction:column; flex:1; padding:12px; gap:10px; overflow-y:auto;">
 
-              <div class="actions">
-                <button id="btn-fetch"  class="btn btn-primary">🔍 Fetch SAC Data</button>
-                <button id="btn-compare" class="btn btn-secondary" disabled>⚖ Compare</button>
-                <button id="btn-import" class="btn btn-success"   disabled>⬆ Import New Records</button>
-                <button id="btn-export" class="btn btn-export">⬇ Export SAC Data</button>
+                <div>
+                  <div class="section-label">1 — Upload Transaction Excel</div>
+                  <div class="drop-zone" id="tx-drop-zone">
+                    <div class="dz-icon">📊</div>
+                    <div class="dz-text">Drop transaction Excel here or click to browse</div>
+                    <div class="dz-filename" id="tx-file-name"></div>
+                  </div>
+                  <input type="file" id="tx-file-input" accept=".xlsx,.xls" />
+                </div>
+
+                <div>
+                  <div class="section-label">2 — Summary</div>
+                  <div class="stats">
+                    <div class="stat-box">
+                      <div class="stat-num" id="tx-stat-rows">—</div>
+                      <div class="stat-lbl">TX ROWS</div>
+                    </div>
+                    <div class="stat-box delta">
+                      <div class="stat-num" id="tx-stat-missing">—</div>
+                      <div class="stat-lbl">MISSING MASTER</div>
+                    </div>
+                    <div class="stat-box ok">
+                      <div class="stat-num" id="tx-stat-ready">—</div>
+                      <div class="stat-lbl">READY</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="tx-missing-wrap"></div>
+
+                <div class="actions">
+                  <button id="btn-tx-validate" class="btn btn-primary" disabled>🔍 Validate Master Data</button>
+                  <button id="btn-tx-import"   class="btn btn-success"  disabled>⬆ Create Missing + Import</button>
+                </div>
+
               </div>
-
             </div>
 
             <div class="right">
@@ -466,6 +527,8 @@
           this.querySelector('#s-secret').value    = s.secret;
           this.querySelector('#s-dimId').value     = s.dimId;
           this.querySelector('#s-namespace').value = s.namespace;
+          this.querySelector('#s-modelId').value   = s.modelId;
+          this.querySelector('#s-txDimCol').value  = s.txDimCol;
           // Show cached dimension info if available
           const nameRow = this.querySelector('#dim-name-row');
           if (this._props._dimInfo !== undefined) {
@@ -489,6 +552,8 @@
         this._props.clientSecret = this.querySelector('#s-secret').value.trim();
         this._props.dimensionId  = this.querySelector('#s-dimId').value.trim();
         this._props.namespace    = this.querySelector('#s-namespace').value.trim();
+        this._props.modelId      = this.querySelector('#s-modelId').value.trim();
+        this._props.txDimCol     = this.querySelector('#s-txDimCol').value.trim();
         this.querySelector('#settings-panel').style.display = 'none';
         this._log('Settings saved.', 'info');
 
@@ -553,6 +618,220 @@
 
       // Export
       this.querySelector('#btn-export').addEventListener('click', () => this._doExport());
+
+      // Tab switching
+      this.querySelector('#tab-master').addEventListener('click', () => {
+        this.querySelector('#tab-master').classList.add('active');
+        this.querySelector('#tab-tx').classList.remove('active');
+        this.querySelector('#panel-master').style.display = 'flex';
+        this.querySelector('#panel-tx').style.display = 'none';
+      });
+      this.querySelector('#tab-tx').addEventListener('click', () => {
+        this.querySelector('#tab-tx').classList.add('active');
+        this.querySelector('#tab-master').classList.remove('active');
+        this.querySelector('#panel-tx').style.display = 'flex';
+        this.querySelector('#panel-master').style.display = 'none';
+      });
+
+      // Transaction file upload
+      const txDropZone  = this.querySelector('#tx-drop-zone');
+      const txFileInput = this.querySelector('#tx-file-input');
+      txDropZone.addEventListener('click', () => txFileInput.click());
+      txDropZone.addEventListener('dragover', e => { e.preventDefault(); txDropZone.classList.add('drag-over'); });
+      txDropZone.addEventListener('dragleave', () => txDropZone.classList.remove('drag-over'));
+      txDropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        txDropZone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) this._handleTxFile(file);
+      });
+      txFileInput.addEventListener('change', () => {
+        if (txFileInput.files[0]) this._handleTxFile(txFileInput.files[0]);
+      });
+
+      // Transaction validate + import
+      this.querySelector('#btn-tx-validate').addEventListener('click', () => this._doTxValidate());
+      this.querySelector('#btn-tx-import').addEventListener('click', () => this._doTxCreateAndImport());
+    }
+
+    async _handleTxFile(file) {
+      this._log(`Reading transaction file: ${file.name}...`, 'info');
+      try {
+        this._txRecords = await this._parseTxExcel(file);
+        this.querySelector('#tx-file-name').textContent = `✔ ${file.name}`;
+        this._log(`✅ ${this._txRecords.length} transaction rows loaded.`, 'success');
+        const el = this.querySelector('#tx-stat-rows');
+        if (el) el.textContent = this._txRecords.length;
+        this.querySelector('#btn-tx-validate').disabled = false;
+      } catch (err) {
+        this._log(`❌ Parse error: ${err.message}`, 'error');
+      }
+    }
+
+    // ── Transaction data methods ──────────────────────────────────────────────
+
+    async _parseTxExcel(file) {
+      const XLSX = await loadXlsx();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const wb = XLSX.read(e.target.result, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            resolve(XLSX.utils.sheet_to_json(ws, { defval: '' }));
+          } catch (err) { reject(err); }
+        };
+        reader.onerror = () => reject(new Error('File read failed'));
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    _renderMissingTable(records) {
+      const wrap = this.querySelector('#tx-missing-wrap');
+      if (!wrap) return;
+      if (!records.length) { wrap.innerHTML = ''; return; }
+      wrap.innerHTML = `
+        <div class="section-label" style="margin-top:6px;">Missing Master (${records.length})</div>
+        <div class="delta-table-wrap">
+          <table>
+            <thead><tr><th>ID</th></tr></thead>
+            <tbody>${records.map(id => `<tr><td>${id}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+    }
+
+    async _doTxValidate() {
+      const s = this._settings();
+      if (!s.dimId || !s.txDimCol) {
+        this._log('❌ Configure Dimension ID and Dim Key Column in settings first.', 'error'); return;
+      }
+      if (!this._txRecords.length) { this._log('❌ No transaction file loaded.', 'error'); return; }
+      this._setStatus('running');
+      this.querySelector('#btn-tx-validate').disabled = true;
+      try {
+        this._log('Fetching token...', 'info');
+        const token = await this._getToken(s);
+        this._log('Fetching existing dimension members...', 'info');
+        this._existingIds = await this._fetchExistingIds(s, token);
+        this._log(`✅ ${this._existingIds.size} existing members in SAC.`, 'success');
+
+        // Extract unique dim values from transaction data
+        const txIds = [...new Set(
+          this._txRecords.map(r => String(r[s.txDimCol] || '').trim()).filter(Boolean)
+        )];
+        this._missingMaster = txIds.filter(id => !this._existingIds.has(id));
+
+        const ready = txIds.length - this._missingMaster.length;
+        const el = (id, val) => { const e = this.querySelector(`#${id}`); if (e) e.textContent = val; };
+        el('tx-stat-missing', this._missingMaster.length);
+        el('tx-stat-ready', ready);
+
+        this._renderMissingTable(this._missingMaster);
+
+        if (this._missingMaster.length > 0) {
+          this._log(`⚠ ${this._missingMaster.length} dimension values missing in SAC master data.`, 'warn');
+        } else {
+          this._log('✅ All dimension values exist in SAC. Ready to import.', 'success');
+        }
+        this._setStatus('done');
+        this.querySelector('#btn-tx-import').disabled = false;
+      } catch (err) {
+        this._log(`❌ ${err.message}`, 'error');
+        this._setStatus('error');
+      } finally {
+        this.querySelector('#btn-tx-validate').disabled = false;
+      }
+    }
+
+    async _importFactData(s, token, csrf, cookie) {
+      const hdrs = {
+        'Authorization': `Bearer ${token}`,
+        'X-CSRF-Token': csrf,
+        'x-sap-sac-custom-auth': 'true',
+        'Cookie': cookie,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      // Create job
+      const jr = await fetch(`${s.baseUrl}/api/v1/dataimport/models/${s.modelId}/factData`, {
+        method: 'POST', headers: hdrs, body: '{}',
+      });
+      if (!jr.ok) throw new Error(`Create fact job: HTTP ${jr.status} — ${await jr.text()}`);
+      const { JobID: jobID } = await jr.json();
+      this._log(`Fact import job created: ${jobID}`, 'info');
+
+      // Upload data
+      const ur = await fetch(`${s.baseUrl}/api/v1/dataimport/jobs/${jobID}`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify({ Data: this._txRecords }),
+      });
+      if (!ur.ok) throw new Error(`Upload fact data: HTTP ${ur.status}`);
+      const ui = await ur.json();
+      this._log(`Uploaded ${ui.upsertedNumberRows || this._txRecords.length} rows (${ui.failedNumberRows || 0} failed)`);
+
+      // Run
+      const rr = await fetch(`${s.baseUrl}/api/v1/dataimport/jobs/${jobID}/run`, {
+        method: 'POST', headers: hdrs, body: '{}',
+      });
+      if (!rr.ok) throw new Error(`Run fact job: HTTP ${rr.status}`);
+
+      // Poll
+      const readHdrs = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json', 'Cookie': cookie };
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const sr = await fetch(`${s.baseUrl}/api/v1/dataimport/jobs/${jobID}/status`, { headers: readHdrs });
+        const st = await sr.json();
+        const status = st.jobStatus || '';
+        this._log(`Fact job status: ${status}`);
+        if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(status)) return st;
+      }
+      throw new Error('Fact job polling timed out');
+    }
+
+    async _doTxCreateAndImport() {
+      const s = this._settings();
+      if (!s.modelId) { this._log('❌ Configure Model ID in settings first.', 'error'); return; }
+      this._setStatus('running');
+      this.querySelector('#btn-tx-import').disabled = true;
+      try {
+        this._log('Fetching token + CSRF...', 'info');
+        const token = await this._getToken(s);
+        const { csrf, cookie } = await this._getCsrfAndCookie(s, token);
+        this._log('✅ Auth ready.', 'success');
+
+        // Step 1: Create missing master data
+        if (this._missingMaster.length > 0) {
+          this._log(`Creating ${this._missingMaster.length} missing master records...`, 'info');
+          const masterRecords = this._missingMaster.map(id => ({ ID: id, Description: id }));
+          const masterResult = await this._importRecords(s, token, csrf, cookie, masterRecords);
+          const mInfo = masterResult.additionalInformation || {};
+          this._log(`✅ Master import ${masterResult.jobStatus}. ${mInfo.totalNumberRowsInJob || masterRecords.length} rows.`, 'success');
+          // Refresh token after master import
+          const token2 = await this._getToken(s);
+          const { csrf: csrf2, cookie: cookie2 } = await this._getCsrfAndCookie(s, token2);
+
+          // Step 2: Import fact data
+          this._log('Importing transaction data to model...', 'info');
+          const factResult = await this._importFactData(s, token2, csrf2, cookie2);
+          const fInfo = factResult.additionalInformation || {};
+          this._log(`✅ Fact import ${factResult.jobStatus}. ${fInfo.totalNumberRowsInJob || this._txRecords.length} rows.`, 'success');
+        } else {
+          // No missing master — import directly
+          this._log('No missing master data. Importing transaction data to model...', 'info');
+          const factResult = await this._importFactData(s, token, csrf, cookie);
+          const fInfo = factResult.additionalInformation || {};
+          this._log(`✅ Fact import ${factResult.jobStatus}. ${fInfo.totalNumberRowsInJob || this._txRecords.length} rows.`, 'success');
+        }
+
+        this._setStatus('done');
+        this._missingMaster = [];
+        this._renderMissingTable([]);
+        const el = (id, val) => { const e = this.querySelector(`#${id}`); if (e) e.textContent = val; };
+        el('tx-stat-missing', 0);
+      } catch (err) {
+        this._log(`❌ ${err.message}`, 'error');
+        this._setStatus('error');
+        this.querySelector('#btn-tx-import').disabled = false;
+      }
     }
 
     async _handleFile(file) {
