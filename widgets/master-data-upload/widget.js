@@ -708,13 +708,17 @@
       });
       if (!ur.ok) throw new Error(`Upload data: HTTP ${ur.status}`);
       const ui = await ur.json();
-      this._log(`Uploaded ${ui.upsertedNumberRows || this._txRecords.length} rows (${ui.failedNumberRows || 0} failed)`);
+      const failedRows = ui.failedNumberRows || 0;
+      this._log(`Uploaded ${ui.upsertedNumberRows || this._txRecords.length} rows (${failedRows} failed)`);
+      if (failedRows > 0 && ui.invalidRows) {
+        this._log(`⚠ Sample error: ${JSON.stringify(ui.invalidRows[0])}`, 'warn');
+      }
 
       // Run
       const rr = await fetch(`${s.baseUrl}/api/v1/dataimport/jobs/${jobID}/run`, {
-        method: 'POST', headers: hdrs, body: '{}',
+        method: 'POST', headers: hdrs, body: JSON.stringify({ JobSettings: { executeWithFailedRows: true } }),
       });
-      if (!rr.ok) throw new Error(`Run job: HTTP ${rr.status}`);
+      if (!rr.ok) throw new Error(`Run job: HTTP ${rr.status} — ${await rr.text()}`);
 
       // Poll
       const readHdrs = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json', 'Cookie': cookie };
