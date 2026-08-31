@@ -394,7 +394,6 @@
               Column Mapping (JSON) — <span style="color:#aaa">{"Excel Col": "Model Field", ...} — leave empty if column names match</span>
               <textarea id="s-txMapping" rows="2" style="border:1px solid #e0e0e0; border-radius:3px; padding:4px 6px; font-size:10px; font-family:monospace; resize:vertical;"></textarea>
             </label>
-            </div>
             <div id="dim-name-row" style="margin-top:8px; display:none; background:#EEF4FB; border:1px solid #c5d9ee; border-radius:4px; padding:8px 10px;">
               <div style="font-size:10px; font-weight:700; color:#1F4E79; letter-spacing:0.4px; margin-bottom:6px;">DIMENSION INFO</div>
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 12px;">
