@@ -155,6 +155,7 @@
         dimId:      p.dimensionId || '',
         namespace:  p.namespace  || 'sac_public_dimensions',
         modelId:    p.modelId    || '',
+        txMapping:  p.txMapping  || '',
       };
     }
 
@@ -389,6 +390,11 @@
               <label>Namespace   <input id="s-namespace"  type="text"     /></label>
               <label>Model ID    <input id="s-modelId"    type="text"     /></label>
             </div>
+            <label style="display:flex; flex-direction:column; font-size:10px; color:#888; gap:2px; margin-top:6px;">
+              Column Mapping (JSON) — <span style="color:#aaa">{"Excel Col": "Model Field", ...} — leave empty if column names match</span>
+              <textarea id="s-txMapping" rows="2" style="border:1px solid #e0e0e0; border-radius:3px; padding:4px 6px; font-size:10px; font-family:monospace; resize:vertical;"></textarea>
+            </label>
+            </div>
             <div id="dim-name-row" style="margin-top:8px; display:none; background:#EEF4FB; border:1px solid #c5d9ee; border-radius:4px; padding:8px 10px;">
               <div style="font-size:10px; font-weight:700; color:#1F4E79; letter-spacing:0.4px; margin-bottom:6px;">DIMENSION INFO</div>
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 12px;">
@@ -515,6 +521,7 @@
           this.querySelector('#s-dimId').value     = s.dimId;
           this.querySelector('#s-namespace').value = s.namespace;
           this.querySelector('#s-modelId').value   = s.modelId;
+          this.querySelector('#s-txMapping').value = s.txMapping;
           // Show cached dimension info if available
           const nameRow = this.querySelector('#dim-name-row');
           if (this._props._dimInfo !== undefined) {
@@ -539,6 +546,7 @@
         this._props.dimensionId  = this.querySelector('#s-dimId').value.trim();
         this._props.namespace    = this.querySelector('#s-namespace').value.trim();
         this._props.modelId      = this.querySelector('#s-modelId').value.trim();
+        this._props.txMapping    = this.querySelector('#s-txMapping').value.trim();
         this.querySelector('#settings-panel').style.display = 'none';
         this._log('Settings saved.', 'info');
 
@@ -694,9 +702,15 @@
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       };
+      // Build job body with optional column mapping
+      let jobBody = {};
+      if (s.txMapping) {
+        try { jobBody.Mapping = JSON.parse(s.txMapping); }
+        catch (e) { this._log('⚠ Mapping JSON invalid, ignoring.', 'warn'); }
+      }
       // Create job — masterFactData imports dimensions + fact data in one shot
       const jr = await fetch(`${s.baseUrl}/api/v1/dataimport/models/${s.modelId}/masterFactData`, {
-        method: 'POST', headers: hdrs, body: '{}',
+        method: 'POST', headers: hdrs, body: JSON.stringify(jobBody),
       });
       if (!jr.ok) throw new Error(`Create job: HTTP ${jr.status} — ${await jr.text()}`);
       const { jobID } = await jr.json();
