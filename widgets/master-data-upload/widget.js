@@ -684,48 +684,6 @@
         </div>`;
     }
 
-    async _doTxValidate() {
-      const s = this._settings();
-      if (!s.dimId || !s.txDimCol) {
-        this._log('❌ Configure Dimension ID and Dim Key Column in settings first.', 'error'); return;
-      }
-      if (!this._txRecords.length) { this._log('❌ No transaction file loaded.', 'error'); return; }
-      this._setStatus('running');
-      this.querySelector('#btn-tx-validate').disabled = true;
-      try {
-        this._log('Fetching token...', 'info');
-        const token = await this._getToken(s);
-        this._log('Fetching existing dimension members...', 'info');
-        this._existingIds = await this._fetchExistingIds(s, token);
-        this._log(`✅ ${this._existingIds.size} existing members in SAC.`, 'success');
-
-        // Extract unique dim values from transaction data
-        const txIds = [...new Set(
-          this._txRecords.map(r => String(r[s.txDimCol] || '').trim()).filter(Boolean)
-        )];
-        this._missingMaster = txIds.filter(id => !this._existingIds.has(id));
-
-        const ready = txIds.length - this._missingMaster.length;
-        const el = (id, val) => { const e = this.querySelector(`#${id}`); if (e) e.textContent = val; };
-        el('tx-stat-missing', this._missingMaster.length);
-        el('tx-stat-ready', ready);
-
-        this._renderMissingTable(this._missingMaster);
-
-        if (this._missingMaster.length > 0) {
-          this._log(`⚠ ${this._missingMaster.length} dimension values missing in SAC master data.`, 'warn');
-        } else {
-          this._log('✅ All dimension values exist in SAC. Ready to import.', 'success');
-        }
-        this._setStatus('done');
-        this.querySelector('#btn-tx-import').disabled = false;
-      } catch (err) {
-        this._log(`❌ ${err.message}`, 'error');
-        this._setStatus('error');
-      } finally {
-        this.querySelector('#btn-tx-validate').disabled = false;
-      }
-    }
 
     async _importFactData(s, token, csrf, cookie) {
       const hdrs = {
