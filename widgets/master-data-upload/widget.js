@@ -149,6 +149,20 @@
       };
     }
 
+    // ── Fetch dimension info ──────────────────────────────────────────────────
+    async _fetchDimensionName(s) {
+      try {
+        const token = await this._getToken(s);
+        const r = await fetch(`${s.baseUrl}/api/v1/dataimport/publicDimensions`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+        });
+        if (!r.ok) return null;
+        const data = await r.json();
+        const list = Array.isArray(data) ? data : (data.value || []);
+        return list.find(d => (d.publicDimensionID || '') === s.dimId) || null;
+      } catch { return null; }
+    }
+
     // ── Auth ─────────────────────────────────────────────────────────────────
     async _getToken(s) {
       const r = await fetch(s.tokenUrl, {
@@ -332,7 +346,10 @@
         <div class="root">
 
           <div class="header">
-            <span class="header-title">📦 Master Data Upload</span>
+            <div>
+              <span class="header-title">📦 Master Data Upload</span>
+              <div id="header-dim-name" style="font-size:10px; color:rgba(255,255,255,0.65); margin-top:1px;"></div>
+            </div>
             <button id="gear-btn" class="gear-btn">⚙ Settings</button>
           </div>
 
@@ -345,6 +362,16 @@
               <label>Client Secret<input id="s-secret"   type="password" /></label>
               <label>Dimension ID<input id="s-dimId"      type="text"     /></label>
               <label>Namespace   <input id="s-namespace"  type="text"     /></label>
+            </div>
+            <div id="dim-name-row" style="margin-top:8px; display:none; background:#EEF4FB; border:1px solid #c5d9ee; border-radius:4px; padding:8px 10px;">
+              <div style="font-size:10px; font-weight:700; color:#1F4E79; letter-spacing:0.4px; margin-bottom:6px;">DIMENSION INFO</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 12px;">
+                <div><div style="font-size:9px;color:#888;">ID</div><div id="dim-info-id" style="font-size:11px;color:#333;font-weight:600;word-break:break-all;"></div></div>
+                <div><div style="font-size:9px;color:#888;">Name</div><div id="dim-info-name" style="font-size:11px;color:#333;font-weight:600;"></div></div>
+                <div style="grid-column:1/-1;"><div style="font-size:9px;color:#888;">Description</div><div id="dim-info-desc" style="font-size:11px;color:#333;"></div></div>
+                <div style="grid-column:1/-1;"><div style="font-size:9px;color:#888;">URL</div><div id="dim-info-url" style="font-size:10px;color:#1F4E79;word-break:break-all;"></div></div>
+              </div>
+            </div>
             </div>
             <div class="settings-actions">
               <button id="cancel-btn">Cancel</button>
@@ -424,11 +451,23 @@
           this.querySelector('#s-secret').value    = s.secret;
           this.querySelector('#s-dimId').value     = s.dimId;
           this.querySelector('#s-namespace').value = s.namespace;
+          // Show cached dimension info if available
+          const nameRow = this.querySelector('#dim-name-row');
+          if (this._props._dimInfo !== undefined) {
+            const m = this._props._dimInfo;
+            this.querySelector('#dim-info-id').textContent   = (m && m.publicDimensionID)          || s.dimId;
+            this.querySelector('#dim-info-name').textContent = (m && m.publicDimensionName)        || '(not found)';
+            this.querySelector('#dim-info-desc').textContent = (m && m.publicDimensionDescription) || '—';
+            this.querySelector('#dim-info-url').textContent  = (m && m.publicDimensionURL)         || '—';
+            nameRow.style.display = 'block';
+          } else {
+            nameRow.style.display = 'none';
+          }
         }
         panel.style.display = isHidden ? 'block' : 'none';
       });
 
-      this.querySelector('#save-btn').addEventListener('click', () => {
+      this.querySelector('#save-btn').addEventListener('click', async () => {
         this._props.baseUrl      = this.querySelector('#s-baseUrl').value.trim();
         this._props.tokenUrl     = this.querySelector('#s-tokenUrl').value.trim();
         this._props.clientId     = this.querySelector('#s-clientId').value.trim();
@@ -437,6 +476,34 @@
         this._props.namespace    = this.querySelector('#s-namespace').value.trim();
         this.querySelector('#settings-panel').style.display = 'none';
         this._log('Settings saved.', 'info');
+
+        // Resolve dimension name
+        const s = this._settings();
+        if (s.dimId && s.baseUrl && s.tokenUrl && s.clientId && s.secret) {
+          const nameRow = this.querySelector('#dim-name-row');
+          nameRow.style.display = 'block';
+          this.querySelector('#dim-info-id').textContent   = '…';
+          this.querySelector('#dim-info-name').textContent = '…';
+          this.querySelector('#dim-info-desc').textContent = '…';
+          this.querySelector('#dim-info-url').textContent  = '…';
+          const match = await this._fetchDimensionName(s);
+          this._props._dimInfo = match;
+          if (match) {
+            this.querySelector('#dim-info-id').textContent   = match.publicDimensionID || s.dimId;
+            this.querySelector('#dim-info-name').textContent = match.publicDimensionName || '—';
+            this.querySelector('#dim-info-desc').textContent = match.publicDimensionDescription || '—';
+            this.querySelector('#dim-info-url').textContent  = match.publicDimensionURL || '—';
+            const headerDim = this.querySelector('#header-dim-name');
+            if (headerDim) headerDim.textContent = match.publicDimensionDescription || match.publicDimensionName || '';
+            this._log(`Dimension: ${match.publicDimensionDescription || match.publicDimensionName || s.dimId}`, 'info');
+          } else {
+            this.querySelector('#dim-info-id').textContent   = s.dimId;
+            this.querySelector('#dim-info-name').textContent = '(not found)';
+            this.querySelector('#dim-info-desc').textContent = '—';
+            this.querySelector('#dim-info-url').textContent  = '—';
+            this._log('⚠ Dimension ID not found in tenant.', 'warn');
+          }
+        }
       });
 
       this.querySelector('#cancel-btn').addEventListener('click', () => {
