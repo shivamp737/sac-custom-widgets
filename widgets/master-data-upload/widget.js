@@ -153,13 +153,29 @@
     async _fetchDimensionName(s) {
       try {
         const token = await this._getToken(s);
-        const r = await fetch(`${s.baseUrl}/api/v1/dataimport/publicDimensions`, {
-          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-        });
-        if (!r.ok) return null;
-        const data = await r.json();
-        const list = Array.isArray(data) ? data : (data.value || []);
-        return list.find(d => (d.publicDimensionID || '') === s.dimId) || null;
+        const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' };
+
+        // Try list endpoint first (handles paginated OData or plain array)
+        let url = `${s.baseUrl}/api/v1/dataimport/publicDimensions`;
+        while (url) {
+          const r = await fetch(url, { headers });
+          if (!r.ok) break;
+          const data = await r.json();
+          const list = Array.isArray(data) ? data : (data.value || []);
+          const match = list.find(d => (d.publicDimensionID || '') === s.dimId);
+          if (match) return match;
+          url = (!Array.isArray(data) && data['@odata.nextLink']) || null;
+        }
+
+        // Fallback: try metadata endpoint for the specific dimension
+        const mr = await fetch(`${s.baseUrl}/api/v1/dataimport/publicDimensions/${s.dimId}/metadata`, { headers });
+        if (mr.ok) {
+          const meta = await mr.json();
+          // metadata may contain dimensionName or label fields
+          const name = meta.dimensionName || meta.name || meta.label || meta.description || null;
+          if (name) return { publicDimensionID: s.dimId, publicDimensionName: name, publicDimensionDescription: name, publicDimensionURL: `${s.baseUrl}/api/v1/dataimport/publicDimensions/${s.dimId}` };
+        }
+        return null;
       } catch { return null; }
     }
 
