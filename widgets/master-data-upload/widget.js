@@ -372,7 +372,6 @@
                 <div style="grid-column:1/-1;"><div style="font-size:9px;color:#888;">URL</div><div id="dim-info-url" style="font-size:10px;color:#1F4E79;word-break:break-all;"></div></div>
               </div>
             </div>
-            </div>
             <div class="settings-actions">
               <button id="cancel-btn">Cancel</button>
               <button id="save-btn" class="btn-save">💾 Save</button>
