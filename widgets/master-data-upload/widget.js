@@ -153,7 +153,7 @@
     async _fetchDimensionName(s) {
       try {
         const token = await this._getToken(s);
-        const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json', 'x-sap-sac-custom-auth': 'true' };
+        const headers = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' };
 
         // Try list endpoint first (handles paginated OData or plain array)
         let url = `${s.baseUrl}/api/v1/dataimport/publicDimensions`;
@@ -176,7 +176,7 @@
           if (name) return { publicDimensionID: s.dimId, publicDimensionName: name, publicDimensionDescription: name, publicDimensionURL: `${s.baseUrl}/api/v1/dataimport/publicDimensions/${s.dimId}` };
         }
         return null;
-      } catch { return null; }
+      } catch (e) { this._log(`⚠ Dim lookup error: ${e.message}`, 'warn'); return null; }
     }
 
     // ── Auth ─────────────────────────────────────────────────────────────────
