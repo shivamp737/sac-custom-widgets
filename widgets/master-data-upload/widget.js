@@ -646,7 +646,7 @@
         this._log(`✅ ${this._txRecords.length} transaction rows loaded.`, 'success');
         const el = this.querySelector('#tx-stat-rows');
         if (el) el.textContent = this._txRecords.length;
-        this.querySelector('#btn-tx-validate').disabled = false;
+        this.querySelector('#btn-tx-import').disabled = false;
       } catch (err) {
         this._log(`❌ Parse error: ${err.message}`, 'error');
       }
