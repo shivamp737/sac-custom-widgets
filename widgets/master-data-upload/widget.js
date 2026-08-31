@@ -155,7 +155,6 @@
         dimId:      p.dimensionId || '',
         namespace:  p.namespace  || 'sac_public_dimensions',
         modelId:    p.modelId    || '',
-        txDimCol:   p.txDimCol   || '',
       };
     }
 
@@ -389,7 +388,6 @@
               <label>Dimension ID<input id="s-dimId"      type="text"     /></label>
               <label>Namespace   <input id="s-namespace"  type="text"     /></label>
               <label>Model ID    <input id="s-modelId"    type="text"     /></label>
-              <label>Dim Key Column<input id="s-txDimCol" type="text" placeholder="e.g. Material" /></label>
             </div>
             <div id="dim-name-row" style="margin-top:8px; display:none; background:#EEF4FB; border:1px solid #c5d9ee; border-radius:4px; padding:8px 10px;">
               <div style="font-size:10px; font-weight:700; color:#1F4E79; letter-spacing:0.4px; margin-bottom:6px;">DIMENSION INFO</div>
@@ -477,22 +475,11 @@
                       <div class="stat-num" id="tx-stat-rows">—</div>
                       <div class="stat-lbl">TX ROWS</div>
                     </div>
-                    <div class="stat-box delta">
-                      <div class="stat-num" id="tx-stat-missing">—</div>
-                      <div class="stat-lbl">MISSING MASTER</div>
-                    </div>
-                    <div class="stat-box ok">
-                      <div class="stat-num" id="tx-stat-ready">—</div>
-                      <div class="stat-lbl">READY</div>
-                    </div>
                   </div>
                 </div>
 
-                <div id="tx-missing-wrap"></div>
-
                 <div class="actions">
-                  <button id="btn-tx-validate" class="btn btn-primary" disabled>🔍 Validate Master Data</button>
-                  <button id="btn-tx-import"   class="btn btn-success"  disabled>⬆ Create Missing + Import</button>
+                  <button id="btn-tx-import" class="btn btn-success" disabled>⬆ Import to Model</button>
                 </div>
 
               </div>
@@ -528,7 +515,6 @@
           this.querySelector('#s-dimId').value     = s.dimId;
           this.querySelector('#s-namespace').value = s.namespace;
           this.querySelector('#s-modelId').value   = s.modelId;
-          this.querySelector('#s-txDimCol').value  = s.txDimCol;
           // Show cached dimension info if available
           const nameRow = this.querySelector('#dim-name-row');
           if (this._props._dimInfo !== undefined) {
@@ -553,7 +539,6 @@
         this._props.dimensionId  = this.querySelector('#s-dimId').value.trim();
         this._props.namespace    = this.querySelector('#s-namespace').value.trim();
         this._props.modelId      = this.querySelector('#s-modelId').value.trim();
-        this._props.txDimCol     = this.querySelector('#s-txDimCol').value.trim();
         this.querySelector('#settings-panel').style.display = 'none';
         this._log('Settings saved.', 'info');
 
@@ -650,7 +635,6 @@
       });
 
       // Transaction validate + import
-      this.querySelector('#btn-tx-validate').addEventListener('click', () => this._doTxValidate());
       this.querySelector('#btn-tx-import').addEventListener('click', () => this._doTxCreateAndImport());
     }
 
@@ -757,7 +741,7 @@
         method: 'POST', headers: hdrs, body: '{}',
       });
       if (!jr.ok) throw new Error(`Create job: HTTP ${jr.status} — ${await jr.text()}`);
-      const { JobID: jobID } = await jr.json();
+      const { jobID } = await jr.json();
       this._log(`Job created: ${jobID}`, 'info');
 
       // Upload data
