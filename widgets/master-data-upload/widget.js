@@ -752,19 +752,19 @@
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       };
-      // Create job
-      const jr = await fetch(`${s.baseUrl}/api/v1/dataimport/models/${s.modelId}/factData`, {
+      // Create job — masterFactData imports dimensions + fact data in one shot
+      const jr = await fetch(`${s.baseUrl}/api/v1/dataimport/models/${s.modelId}/masterFactData`, {
         method: 'POST', headers: hdrs, body: '{}',
       });
-      if (!jr.ok) throw new Error(`Create fact job: HTTP ${jr.status} — ${await jr.text()}`);
+      if (!jr.ok) throw new Error(`Create job: HTTP ${jr.status} — ${await jr.text()}`);
       const { JobID: jobID } = await jr.json();
-      this._log(`Fact import job created: ${jobID}`, 'info');
+      this._log(`Job created: ${jobID}`, 'info');
 
       // Upload data
       const ur = await fetch(`${s.baseUrl}/api/v1/dataimport/jobs/${jobID}`, {
         method: 'POST', headers: hdrs, body: JSON.stringify({ Data: this._txRecords }),
       });
-      if (!ur.ok) throw new Error(`Upload fact data: HTTP ${ur.status}`);
+      if (!ur.ok) throw new Error(`Upload data: HTTP ${ur.status}`);
       const ui = await ur.json();
       this._log(`Uploaded ${ui.upsertedNumberRows || this._txRecords.length} rows (${ui.failedNumberRows || 0} failed)`);
 
@@ -772,7 +772,7 @@
       const rr = await fetch(`${s.baseUrl}/api/v1/dataimport/jobs/${jobID}/run`, {
         method: 'POST', headers: hdrs, body: '{}',
       });
-      if (!rr.ok) throw new Error(`Run fact job: HTTP ${rr.status}`);
+      if (!rr.ok) throw new Error(`Run job: HTTP ${rr.status}`);
 
       // Poll
       const readHdrs = { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json', 'Cookie': cookie };
@@ -781,10 +781,10 @@
         const sr = await fetch(`${s.baseUrl}/api/v1/dataimport/jobs/${jobID}/status`, { headers: readHdrs });
         const st = await sr.json();
         const status = st.jobStatus || '';
-        this._log(`Fact job status: ${status}`);
+        this._log(`Status: ${status}`);
         if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(status)) return st;
       }
-      throw new Error('Fact job polling timed out');
+      throw new Error('Job polling timed out');
     }
 
     async _doTxCreateAndImport() {
@@ -796,32 +796,10 @@
         this._log('Fetching token + CSRF...', 'info');
         const token = await this._getToken(s);
         const { csrf, cookie } = await this._getCsrfAndCookie(s, token);
-        this._log('✅ Auth ready.', 'success');
-
-        // Step 1: Create missing master data
-        if (this._missingMaster.length > 0) {
-          this._log(`Creating ${this._missingMaster.length} missing master records...`, 'info');
-          const masterRecords = this._missingMaster.map(id => ({ ID: id, Description: id }));
-          const masterResult = await this._importRecords(s, token, csrf, cookie, masterRecords);
-          const mInfo = masterResult.additionalInformation || {};
-          this._log(`✅ Master import ${masterResult.jobStatus}. ${mInfo.totalNumberRowsInJob || masterRecords.length} rows.`, 'success');
-          // Refresh token after master import
-          const token2 = await this._getToken(s);
-          const { csrf: csrf2, cookie: cookie2 } = await this._getCsrfAndCookie(s, token2);
-
-          // Step 2: Import fact data
-          this._log('Importing transaction data to model...', 'info');
-          const factResult = await this._importFactData(s, token2, csrf2, cookie2);
-          const fInfo = factResult.additionalInformation || {};
-          this._log(`✅ Fact import ${factResult.jobStatus}. ${fInfo.totalNumberRowsInJob || this._txRecords.length} rows.`, 'success');
-        } else {
-          // No missing master — import directly
-          this._log('No missing master data. Importing transaction data to model...', 'info');
-          const factResult = await this._importFactData(s, token, csrf, cookie);
-          const fInfo = factResult.additionalInformation || {};
-          this._log(`✅ Fact import ${factResult.jobStatus}. ${fInfo.totalNumberRowsInJob || this._txRecords.length} rows.`, 'success');
-        }
-
+        this._log('✅ Auth ready. Starting masterFactData import...', 'success');
+        const result = await this._importFactData(s, token, csrf, cookie);
+        const info = result.additionalInformation || {};
+        this._log(`✅ Import ${result.jobStatus}. ${info.totalNumberRowsInJob || this._txRecords.length} rows, ${info.failedNumberRows || 0} failed.`, 'success');
         this._setStatus('done');
         this._missingMaster = [];
         this._renderMissingTable([]);
