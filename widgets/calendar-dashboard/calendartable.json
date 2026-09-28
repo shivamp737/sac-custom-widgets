@@ -1,0 +1,47 @@
+{
+  "id": "com.custom.calendartable",
+  "version": "1.0.5",
+  "name": "Calendar Table",
+  "description": "Receives tab-separated calendar data from SAC scripting and renders it as a styled table with CSV download.",
+  "newInstancePrefix": "CalendarTable",
+  "icon": "",
+  "vendor": "Shivam",
+  "eula": "",
+  "license": "",
+  "webcomponents": [
+    {
+      "kind": "main",
+      "tag": "com-custom-calendartable",
+      "url": "/calendartable.js",
+      "integrity": "sha256-mhF8k/rfS6YV//aS95U1NeAdN0NXLtGHtlxfaxJFmSk=",
+      "ignoreIntegrity": false
+    }
+  ],
+  "properties": {
+    "tableData": {
+      "type": "string",
+      "description": "Tab-separated calendar data string — set via setTableData() from SAC scripting.",
+      "default": ""
+    }
+  },
+  "methods": {
+    "setTableData": {
+      "description": "Pass tab-separated calendar data from SAC scripting to render as a table. First row must be the header. Columns separated by tab (\\t), rows by newline (\\n).",
+      "parameters": [
+        {
+          "name": "data",
+          "type": "string",
+          "description": "Tab-separated string — first row is the header row."
+        }
+      ]
+    },
+    "clearTable": {
+      "description": "Clears all table data and resets the widget to its empty state."
+    }
+  },
+  "events": {
+    "onDataLoaded": {
+      "description": "Fired after setTableData() has parsed and rendered the table."
+    }
+  }
+}
